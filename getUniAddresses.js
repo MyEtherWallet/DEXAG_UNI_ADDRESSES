@@ -9,21 +9,11 @@ const DexTradingAbi = require("./abis/DexTrading.json");
 const DexTradingOldAbi = require("./abis/DexTradingOld.json");
 const sigsMap = require("./functionParams.js");
 
-let web3 = new Web3(
-  new Web3.providers.HttpProvider(
-    `https://mainnet.infura.io/v3/${process.env.INFURA}`
-  )
-);
+let web3 = new Web3(new Web3.providers.HttpProvider(process.env.NODE_URL));
 
 const UniswapV2Router = web3.utils.toChecksumAddress(
   "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"
 );
-
-const dexagAddresses = [
-  "0x745DAA146934B27e3f0b6bff1a6e36b9B90fb131",
-  "0xA540fb50288cc31639305B1675c70763C334953b",
-];
-const dexagOldAddresses = ["0x932348DF588923bA3F1Fd50593B22C4e2A287919"];
 
 async function start() {
   let uniswapExchanges = await getUniswapExchanges();
@@ -59,16 +49,15 @@ async function getDexagTraders(uniswapExchanges) {
 
   return new Promise(async (resolve, reject) => {
     fs.createReadStream("./txs.csv")
-      .pipe(parse({ delimiter: ":" }))
+      .pipe(parse({ delimiter: "," }))
       .on("data", function (csvrow) {
         transactions.push(csvrow);
       })
       .on("end", function () {
         for (let i = 1; i < transactions.length; i++) {
-          let transactionData = transactions[i][0].split(",");
+          let transactionData = transactions[i];
           let address = transactionData[2];
           let data = transactionData[4];
-
           let sigType = sigsMap[data.substr(0, 10)];
 
           if (sigType) {
