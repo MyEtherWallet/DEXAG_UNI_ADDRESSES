@@ -84,7 +84,7 @@ async function getDexagTraders(uniswapExchanges) {
                 uniswapExchanges.indexOf(
                   web3.utils.toChecksumAddress(callAddress) >= 0
                 ) ||
-                web3.utils.toChecksumAddress(exchange) === UniswapV2Router
+                web3.utils.toChecksumAddress(callAddress) === UniswapV2Router
               ) {
                 try {
                   if (
