@@ -63,7 +63,7 @@ async function getDexagTraders(uniswapExchanges) {
       .on("data", function (csvrow) {
         transactions.push(csvrow);
       })
-      .on("end", function () {
+      .on("end", async function () {
         for (let i = 1; i < transactions.length; i++) {
           let transactionData = transactions[i][0].split(",");
           let address = transactionData[2];
@@ -105,6 +105,77 @@ async function getDexagTraders(uniswapExchanges) {
             console.log(
               `Error: no valid signature for tx: ${transactionData[0]}`
             );
+          }
+        }
+
+        // check events for internal trade transactions
+        for (let dexag of dexagAddresses) {
+          let dexagTrading = new web3.eth.Contract(DexTradingAbi, dexag);
+          let events = await dexagTrading.getPastEvents("Trade", {
+            fromBlock: 8620106, // oldest contract deployment block
+          });
+          for (let event of events) {
+            let uniswap = false;
+      
+            for (let exchange of event.returnValues.exchanges) {
+              if (
+                uniswapExchanges.indexOf(web3.utils.toChecksumAddress(exchange) >= 0)
+              ) {
+                uniswap = true;
+                break;
+              }
+      
+              if (web3.utils.toChecksumAddress(exchange) === UniswapV2Router) {
+                uniswap = true;
+                break;
+              }
+            }
+      
+            if (
+              uniswap &&
+              uniqueTraders.indexOf(
+                web3.utils.toChecksumAddress(event.returnValues.trader)
+              ) < 0
+            ) {
+              uniqueTraders.push(
+                web3.utils.toChecksumAddress(event.returnValues.trader)
+              );
+            }
+          }
+        }
+
+        for (let dexag of dexagOldAddresses) {
+          let dexagTrading = new web3.eth.Contract(DexTradingOldAbi, dexag);
+          let events = await dexagTrading.getPastEvents("Trade", {
+            fromBlock: 8620106, // oldest contract deployment block
+          });
+          for (let event of events) {
+            let uniswap = false;
+      
+            for (let exchange of event.returnValues.exchanges) {
+              if (
+                uniswapExchanges.indexOf(web3.utils.toChecksumAddress(exchange) >= 0)
+              ) {
+                uniswap = true;
+                break;
+              }
+      
+              if (web3.utils.toChecksumAddress(exchange) === UniswapV2Router) {
+                uniswap = true;
+                break;
+              }
+            }
+      
+            if (
+              uniswap &&
+              uniqueTraders.indexOf(
+                web3.utils.toChecksumAddress(event.returnValues.trader)
+              ) < 0
+            ) {
+              uniqueTraders.push(
+                web3.utils.toChecksumAddress(event.returnValues.trader)
+              );
+            }
           }
         }
         console.log(
