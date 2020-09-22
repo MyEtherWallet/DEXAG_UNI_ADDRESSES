@@ -1,10 +1,13 @@
-require('dotenv').config();
+require("dotenv").config();
 const Web3 = require("web3");
 const axios = require("axios");
-const fs = require('fs').promises
+const fs = require("fs");
+const fsPromise = fs.promises;
+const parse = require("csv-parse");
 const UniswapConstants = require("./abis/uniswap.js");
 const DexTradingAbi = require("./abis/DexTrading.json");
 const DexTradingOldAbi = require("./abis/DexTradingOld.json");
+const sigsMap = require("./functionParams.js");
 
 let web3 = new Web3(
   new Web3.providers.HttpProvider(
@@ -29,7 +32,11 @@ async function start() {
 
   let prunedTraders = await pruneMerkleClaims(dexagTraders);
 
-  await fs.writeFile('./excludedUNIAddresses.json', JSON.stringify(prunedTraders), {});
+  await fsPromise.writeFile(
+    "./excludedUNIAddresses.json",
+    JSON.stringify(prunedTraders),
+    {}
+  );
 }
 
 async function getUniswapExchanges() {
@@ -47,82 +54,65 @@ async function getUniswapExchanges() {
 }
 
 async function getDexagTraders(uniswapExchanges) {
+  let transactions = [];
   let uniqueTraders = [];
 
-  for (let dexag of dexagAddresses) {
-    let dexagTrading = new web3.eth.Contract(DexTradingAbi, dexag);
-    let events = await dexagTrading.getPastEvents("Trade", {
-      fromBlock: 8620106, // oldest contract deployment block
-    });
-    for (let event of events) {
-      let uniswap = false;
+  return new Promise(async (resolve, reject) => {
+    fs.createReadStream("./txs.csv")
+      .pipe(parse({ delimiter: ":" }))
+      .on("data", function (csvrow) {
+        transactions.push(csvrow);
+      })
+      .on("end", function () {
+        for (let i = 1; i < transactions.length; i++) {
+          let transactionData = transactions[i][0].split(",");
+          let address = transactionData[2];
+          let data = transactionData[4];
 
-      for (let exchange of event.returnValues.exchanges) {
-        if (
-          uniswapExchanges.indexOf(web3.utils.toChecksumAddress(exchange) >= 0)
-        ) {
-          uniswap = true;
-          break;
+          let sigType = sigsMap[data.substr(0, 10)];
+
+          if (sigType) {
+            let decodedData = web3.eth.abi.decodeParameters(
+              sigType.parameters,
+              data.substr(10)
+            );
+
+            let callAddresses = decodedData[sigType.exchangesIndex];
+
+            for (let callAddress of callAddresses) {
+              if (
+                uniswapExchanges.indexOf(
+                  web3.utils.toChecksumAddress(callAddress) >= 0
+                ) ||
+                web3.utils.toChecksumAddress(exchange) === UniswapV2Router
+              ) {
+                try {
+                  if (
+                    uniqueTraders.indexOf(
+                      web3.utils.toChecksumAddress(address)
+                    ) < 0
+                  ) {
+                    uniqueTraders.push(web3.utils.toChecksumAddress(address));
+                  }
+                } catch (error) {
+                  console.log(
+                    `Address formatting issue for ${transactionData[0]}: ${error}`
+                  );
+                }
+              }
+            }
+          } else {
+            console.log(
+              `Error: no valid signature for tx: ${transactionData[0]}`
+            );
+          }
         }
-
-        if (web3.utils.toChecksumAddress(exchange) === UniswapV2Router) {
-          uniswap = true;
-          break;
-        }
-      }
-
-      if (
-        uniswap &&
-        uniqueTraders.indexOf(
-          web3.utils.toChecksumAddress(event.returnValues.trader)
-        ) < 0
-      ) {
-        uniqueTraders.push(
-          web3.utils.toChecksumAddress(event.returnValues.trader)
+        console.log(
+          `# Unique Dexag traders that used Uniswap: ${uniqueTraders.length}`
         );
-      }
-    }
-  }
-
-  for (let dexag of dexagOldAddresses) {
-    let dexagTrading = new web3.eth.Contract(DexTradingOldAbi, dexag);
-    let events = await dexagTrading.getPastEvents("Trade", {
-      fromBlock: 8620106, // oldest contract deployment block
-    });
-    for (let event of events) {
-      let uniswap = false;
-
-      for (let exchange of event.returnValues.exchanges) {
-        if (
-          uniswapExchanges.indexOf(web3.utils.toChecksumAddress(exchange) >= 0)
-        ) {
-          uniswap = true;
-          break;
-        }
-
-        if (web3.utils.toChecksumAddress(exchange) === UniswapV2Router) {
-          uniswap = true;
-          break;
-        }
-      }
-
-      if (
-        uniswap &&
-        uniqueTraders.indexOf(
-          web3.utils.toChecksumAddress(event.returnValues.trader)
-        ) < 0
-      ) {
-        uniqueTraders.push(
-          web3.utils.toChecksumAddress(event.returnValues.trader)
-        );
-      }
-    }
-  }
-
-  console.log(
-    `# Unique Dexag traders that used Uniswap: ${uniqueTraders.length}`
-  );
-  return uniqueTraders;
+        resolve(uniqueTraders);
+      });
+  });
 }
 
 async function pruneMerkleClaims(dexagTraders) {
@@ -141,8 +131,10 @@ async function pruneMerkleClaims(dexagTraders) {
       prunedTraders.push(trader);
     }
   }
-  console.log(`# Dexag Traders excluded from UNI Drop: ${prunedTraders.length}`);
-  return prunedTraders
+  console.log(
+    `# Dexag Traders excluded from UNI Drop: ${prunedTraders.length}`
+  );
+  return prunedTraders;
 }
 
 start();
