@@ -19,6 +19,8 @@ const UniswapV2Router = web3.utils.toChecksumAddress(
   "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"
 );
 
+const SNAPSHOT_DATE = 10771926;
+
 const dexagAddresses = [
   "0x745DAA146934B27e3f0b6bff1a6e36b9B90fb131",
   "0xA540fb50288cc31639305B1675c70763C334953b",
@@ -66,8 +68,13 @@ async function getDexagTraders(uniswapExchanges) {
       .on("end", async function () {
         for (let i = 1; i < transactions.length; i++) {
           let transactionData = transactions[i][0].split(",");
+          let blockNum = Number(transactionData[1]);
           let address = transactionData[2];
           let data = transactionData[4];
+
+          if (blockNum > SNAPSHOT_DATE) {
+            continue;
+          }
 
           let sigType = sigsMap[data.substr(0, 10)];
 
@@ -82,8 +89,8 @@ async function getDexagTraders(uniswapExchanges) {
             for (let callAddress of callAddresses) {
               if (
                 uniswapExchanges.indexOf(
-                  web3.utils.toChecksumAddress(callAddress) >= 0
-                ) ||
+                  web3.utils.toChecksumAddress(callAddress)
+                ) >= 0 ||
                 web3.utils.toChecksumAddress(callAddress) === UniswapV2Router
               ) {
                 try {
@@ -113,13 +120,14 @@ async function getDexagTraders(uniswapExchanges) {
           let dexagTrading = new web3.eth.Contract(DexTradingAbi, dexag);
           let events = await dexagTrading.getPastEvents("Trade", {
             fromBlock: 8620106, // oldest contract deployment block
+            toBlock: SNAPSHOT_DATE
           });
           for (let event of events) {
             let uniswap = false;
       
             for (let exchange of event.returnValues.exchanges) {
               if (
-                uniswapExchanges.indexOf(web3.utils.toChecksumAddress(exchange) >= 0)
+                uniswapExchanges.indexOf(web3.utils.toChecksumAddress(exchange)) >= 0
               ) {
                 uniswap = true;
                 break;
@@ -148,13 +156,14 @@ async function getDexagTraders(uniswapExchanges) {
           let dexagTrading = new web3.eth.Contract(DexTradingOldAbi, dexag);
           let events = await dexagTrading.getPastEvents("Trade", {
             fromBlock: 8620106, // oldest contract deployment block
+            toBlock: SNAPSHOT_DATE
           });
           for (let event of events) {
             let uniswap = false;
       
             for (let exchange of event.returnValues.exchanges) {
               if (
-                uniswapExchanges.indexOf(web3.utils.toChecksumAddress(exchange) >= 0)
+                uniswapExchanges.indexOf(web3.utils.toChecksumAddress(exchange)) >= 0
               ) {
                 uniswap = true;
                 break;
