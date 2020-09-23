@@ -15,6 +15,8 @@ const UniswapV2Router = web3.utils.toChecksumAddress(
   "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"
 );
 
+const SNAPSHOT_DATE = 10771926;
+
 async function start() {
   let uniswapExchanges = await getUniswapExchanges();
 
@@ -53,11 +55,17 @@ async function getDexagTraders(uniswapExchanges) {
       .on("data", function (csvrow) {
         transactions.push(csvrow);
       })
-      .on("end", function () {
+      .on("end", async function () {
         for (let i = 1; i < transactions.length; i++) {
           let transactionData = transactions[i];
+          let blockNum = Number(transactionData[1]);
           let address = transactionData[2];
           let data = transactionData[4];
+
+          if (blockNum > SNAPSHOT_DATE) {
+            continue;
+          }
+
           let sigType = sigsMap[data.substr(0, 10)];
 
           if (sigType) {
@@ -71,8 +79,8 @@ async function getDexagTraders(uniswapExchanges) {
             for (let callAddress of callAddresses) {
               if (
                 uniswapExchanges.indexOf(
-                  web3.utils.toChecksumAddress(callAddress) >= 0
-                ) ||
+                  web3.utils.toChecksumAddress(callAddress)
+                ) >= 0 ||
                 web3.utils.toChecksumAddress(callAddress) === UniswapV2Router
               ) {
                 try {
